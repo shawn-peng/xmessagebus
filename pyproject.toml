@@ -8,7 +8,7 @@ exclude = [
 ]
 
 [project]
-name = "x-messagebus"
+name = "xmessagebus"
 version = "0.1"
 authors = [
     { name="Yisu Peng", email="yisupeng@gmail.com" },
@@ -25,10 +25,10 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/shawn-peng/x-messagebus"
-"Bug Tracker" = "https://github.com/shawn-peng/x-messagebus/issues"
+"Homepage" = "https://github.com/shawn-peng/xmessagebus"
+"Bug Tracker" = "https://github.com/shawn-peng/xmessagebus/issues"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/xmessagebus"]
+#[tool.hatch.build.targets.wheel]
+#packages = ["src/xmessagebus"]
 
 

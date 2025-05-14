@@ -9,8 +9,8 @@ from asyncio_utils import *
 
 # mainloop = asyncio.new_event_loop()
 # mainloop.set_debug(True)
-bus_thread = ThreadedEventLoop()
-mainloop = bus_thread.loop
+loop_thread = ThreadedEventLoop('bus')
+mainloop = loop_thread.loop
 
 sources = {}
 
@@ -153,7 +153,9 @@ class Bus:
         mainloop.call_soon_threadsafe(_start)
 
     def stop(self):
-        mainloop.call_soon_threadsafe(self.task.cancel)
+        print(f'stopping bus ({self.name})')
+        loop_thread.call_sync(self.task.cancel)
+        print(f'bus ({self.name}) stopped')
 
     def __repr__(self):
         return f'<Bus: {self.name}> (Subscribed: {len(self.dispatcher)}, Observing: {len(self.monitor)})'
@@ -176,12 +178,13 @@ def observe_bus(category, callback, *dataargs):
 
 
 def shutdown():
+    global mainbus
     print('shutting down message bus')
-    # mainbus.stop()
+    mainbus.stop()
+    mainbus = None
     # pass
     # mainloop.stop()
     # mainloop
-
 
 # def main():
 #     # global mainloop
@@ -195,6 +198,6 @@ def shutdown():
 #     print('message_bus finished')
 
 
-def stop():
-    print('stopping message_bus')
-    mainloop.call_soon_threadsafe(shutdown)
+# def stop():
+#     print('stopping message_bus')
+#     mainloop.call_soon_threadsafe(shutdown)
