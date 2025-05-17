@@ -5,7 +5,8 @@ from collections import deque
 from threading import RLock
 from copy import deepcopy
 
-from asyncio_utils import *
+# from asyncio_utils import *
+from xasyncio import *
 
 # mainloop = asyncio.new_event_loop()
 # mainloop.set_debug(True)
