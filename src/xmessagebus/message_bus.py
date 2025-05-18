@@ -1,17 +1,19 @@
 import asyncio
+from absl import logging
+from absl import app
 from enum import Enum
 from collections import deque
 # from wrapt import synchronized
 from threading import RLock
 from copy import deepcopy
 
-# from asyncio_utils import *
 from xasyncio import *
+import atexit
+import sys
 
-# mainloop = asyncio.new_event_loop()
-# mainloop.set_debug(True)
+
 loop_thread = ThreadedEventLoop('bus')
-mainloop = loop_thread.loop
+mainloop = loop_thread.loop  # when stopping, call loop_thread.stop()
 
 sources = {}
 
@@ -90,7 +92,7 @@ class Bus:
             return event, ''
         return tuple(l)
 
-    def publish(self, event: str, args):
+    def publish(self, event: str, *args):
         """
         publish an event with arguments to the event queue, this is thread safe
         :param event: str, name of event (structured with channels delimited by '|', e.g. log|ui)
@@ -154,9 +156,9 @@ class Bus:
         mainloop.call_soon_threadsafe(_start)
 
     def stop(self):
-        print(f'stopping bus ({self.name})')
+        logging.info(f'stopping bus ({self.name})')
         loop_thread.call_sync(self.task.cancel)
-        print(f'bus ({self.name}) stopped')
+        logging.info(f'bus ({self.name}) stopped')
 
     def __repr__(self):
         return f'<Bus: {self.name}> (Subscribed: {len(self.dispatcher)}, Observing: {len(self.monitor)})'
@@ -179,26 +181,42 @@ def observe_bus(category, callback, *dataargs):
 
 
 def shutdown():
-    global mainbus
-    print('shutting down message bus')
+    global loop_thread, mainbus
+    if not loop_thread:
+        logging.info('loop already stopped')
+        return
+    logging.info('shutting down xmessagebus module')
     mainbus.stop()
     mainbus = None
+    loop_thread.stop()
+    loop_thread = None
     # pass
     # mainloop.stop()
     # mainloop
 
+
 # def main():
 #     # global mainloop
-#     print('message_bus running')
+#     logging.info('message_bus running')
 #
 #     # cross_thread_call(mainloop, run)
 #     # mainloop
 #     # asyncio.ensure_future(mainbus.run())
 #     # mainloop.create_task(mainbus.run())
 #     mainloop.run_forever()
-#     print('message_bus finished')
+#     logging.info('message_bus finished')
 
 
 # def stop():
-#     print('stopping message_bus')
+#     logging.info('stopping message_bus')
 #     mainloop.call_soon_threadsafe(shutdown)
+
+def cleanup():
+    # Do cleanup actions here
+    logging.info("Module cleanup")
+    shutdown()
+    # loop_thread.stop()
+
+
+logging.info("register cleanup")
+atexit.register(cleanup)
