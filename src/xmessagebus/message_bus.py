@@ -12,6 +12,13 @@ import atexit
 import sys
 
 
+# formatter = logging.PythonFormatter("[%(levelname)s] %(asctime)s %(filename)s:%(lineno)d %(message)s")
+# logging.get_absl_handler().setFormatter(formatter)
+
+# logging.get_absl_handler().python_handler.stream = sys.stdout
+
+# mainloop = asyncio.new_event_loop()
+# mainloop.set_debug(True)
 loop_thread = ThreadedEventLoop('bus')
 mainloop = loop_thread.loop  # when stopping, call loop_thread.stop()
 
@@ -213,7 +220,12 @@ def shutdown():
 
 def cleanup():
     # Do cleanup actions here
-    logging.info("Module cleanup")
+    if sys.stderr != logging.get_absl_handler().python_handler.stream:
+        print(sys.stderr)
+        print(logging.get_absl_handler().python_handler.stream)
+        logging.get_absl_handler().python_handler.stream = sys.stderr
+    if not sys.stderr.closed:
+        logging.info("Module cleanup")
     shutdown()
     # loop_thread.stop()
 
