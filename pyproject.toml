@@ -8,8 +8,8 @@ exclude = [
 ]
 
 [project]
+dynamic = ["version"]
 name = "xmessagebus"
-version = "0.1"
 authors = [
     { name="Yisu Peng", email="yisupeng@gmail.com" },
 ]
