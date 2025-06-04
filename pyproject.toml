@@ -1,6 +1,9 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build]
 exclude = [
@@ -11,7 +14,7 @@ exclude = [
 dynamic = ["version"]
 name = "xmessagebus"
 authors = [
-    { name="Yisu Peng", email="yisupeng@gmail.com" },
+    { name = "Yisu Peng", email = "yisupeng@gmail.com" },
 ]
 description = "A package to publish and receive messages"
 #readme = "README.md"
