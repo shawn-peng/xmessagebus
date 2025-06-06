@@ -81,6 +81,7 @@ asyncio_loop_lock = RLock()
 
 
 class Bus:
+    buses = {}
     def __init__(self, name='root'):
         self.name = name
         self.routers = {}
@@ -93,11 +94,21 @@ class Bus:
         self.task = None
         self.start()
 
+    def get_bus(self, name):
+        space, name = self.split_channel(name)
+        if name:
+            return self.routers[space].get_bus(name)
+        return self.routers[space]
+
     def split_channel(self, event: str):
         l = event.split(self.dilim, 1)
         if len(l) == 1:
             return event, ''
         return tuple(l)
+
+    def _push_queue_event(self, event, args):
+        mainloop.create_task(self.event_queue.put((event, args)))
+        # loop_thread.call_async(self.event_queue.put, (event, args))
 
     def publish(self, event: str, *args):
         """
@@ -109,17 +120,15 @@ class Bus:
 
         # args = deepcopy(args)
 
-        def _push_queue_event(event, args):
-            mainloop.create_task(self.event_queue.put((event, args)))
-
-        mainloop.call_soon_threadsafe(_push_queue_event, event, args)
+        # mainloop.call_soon_threadsafe(_push_queue_event, event, args)
+        self._push_queue_event(event, args)
 
         space, event = self.split_channel(event)
         if not space or space not in self.routers:
             # skip
             return
 
-        self.routers[space].publish(event, args)
+        self.routers[space].publish(event, *args)
 
     def subscribe(self, event: str, callback, dataargs):
         """
@@ -150,6 +159,9 @@ class Bus:
     async def run(self):
         self.running = True
         while self.running:
+            # events = []
+            # while not self.event_queue.empty():
+            #     self.event_queue.get_nowait()
             event, args = await self.event_queue.get()
             if event == '':
                 self.dispatcher.dispatch(*args)
@@ -164,6 +176,8 @@ class Bus:
 
     def stop(self):
         logging.info(f'stopping bus ({self.name})')
+        for bus in self.routers.values():
+            bus.stop()
         loop_thread.call_sync(self.task.cancel)
         logging.info(f'bus ({self.name}) stopped')
 
@@ -176,7 +190,7 @@ mainbus = Bus()
 
 def publish_event(event, *args):
     # mainbus.publish(event, args)
-    mainloop.call_soon_threadsafe(mainbus.publish, event, args)
+    mainloop.call_soon_threadsafe(mainbus.publish, event, *args)
 
 
 def subscribe_event(event, callback, *dataargs):
@@ -185,6 +199,10 @@ def subscribe_event(event, callback, *dataargs):
 
 def observe_bus(category, callback, *dataargs):
     return mainbus.observe(category, callback, dataargs)
+
+
+def get_bus(name):
+    return mainbus.get_bus(name)
 
 
 def shutdown():
