@@ -2,7 +2,7 @@ import asyncio
 from absl import logging
 from absl import app
 from enum import Enum
-from collections import deque
+from collections import deque, defaultdict
 # from wrapt import synchronized
 from threading import RLock
 from copy import deepcopy
@@ -10,7 +10,6 @@ from copy import deepcopy
 from xasyncio import *
 import atexit
 import sys
-
 
 # formatter = logging.PythonFormatter("[%(levelname)s] %(asctime)s %(filename)s:%(lineno)d %(message)s")
 # logging.get_absl_handler().setFormatter(formatter)
@@ -82,6 +81,7 @@ asyncio_loop_lock = RLock()
 
 class Bus:
     buses = {}
+
     def __init__(self, name='root'):
         self.name = name
         self.routers = {}
@@ -96,6 +96,8 @@ class Bus:
 
     def get_bus(self, name):
         space, name = self.split_channel(name)
+        if space not in self.routers:
+            self.routers[space] = Bus(space)
         if name:
             return self.routers[space].get_bus(name)
         return self.routers[space]
