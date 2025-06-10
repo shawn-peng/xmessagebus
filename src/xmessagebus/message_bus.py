@@ -145,7 +145,7 @@ class Bus:
         if space not in self.routers:
             self.routers[space] = Bus(space)
 
-        return self.routers[space].subscribe(event, callback, dataargs)
+        return self.routers[space].subscribe(event, callback, *dataargs)
 
     def observe(self, category, callback, dataargs):
         if category == '':
@@ -196,7 +196,7 @@ def publish_event(event, *args):
 
 
 def subscribe_event(event, callback, *dataargs):
-    return mainbus.subscribe(event, callback, dataargs)
+    return mainbus.subscribe(event, callback, *dataargs)
 
 
 def observe_bus(category, callback, *dataargs):
