@@ -132,7 +132,7 @@ class Bus:
 
         self.routers[space].publish(event, *args)
 
-    def subscribe(self, event: str, callback, dataargs):
+    def subscribe(self, event: str, callback, *dataargs):
         """
         if event == '', will subscribe to all event on this bus
         callback need to be thread safe, and finish fast
