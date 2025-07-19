@@ -24,8 +24,8 @@ import sys
 
 # mainloop = asyncio.new_event_loop()
 # mainloop.set_debug(True)
-loop_thread = AsyncThread('message_bus_thread')
-mainloop = loop_thread.loop  # when stopping, call loop_thread.stop()
+loop_thread = xasyncio.AsyncThread('message_bus_thread')
+mainloop = loop_thread.loop
 
 sources = {}
 
@@ -52,8 +52,9 @@ class Subscriber:
     def __post_init__(self):
         self.listen()
 
-    def enqueue(self, args):
+    async def enqueue(self, args):
         """Need to be thread-safe"""
+
         # assert threading.current_thread() == self.owner_async_thread
         async def _enqueue():
             await self.queue.put(args)
@@ -61,7 +62,8 @@ class Subscriber:
 
         logging.debug(f'enqueue in thread {self.owner_async_thread}')
         # self.owner_async_thread.call_sync(_enqueue)
-        self.owner_async_thread.await_coroutine(_enqueue())
+        # self.owner_async_thread.await_coroutine(_enqueue())
+        await self.owner_async_thread.run_coroutine(_enqueue())
 
     def listen(self):
         """Non-blocking"""
@@ -176,12 +178,13 @@ class MessageBus:
     def logging(level, *args):
         logging.log(level, *args)
 
-    def _push_queue_event(self, event, args):
+    async def _push_queue_event(self, event, args):
         # This is also thread safe
         # mainloop.create_task(self.event_queue.put((event, args)))
         self.logging(logging.DEBUG, f'putting {event} on bus...')
         # loop_thread.call_sync(self.event_queue.put, (event, args))
-        loop_thread.await_coroutine(self.event_queue.put((event, args)))
+        # loop_thread.run_coroutine(self.event_queue.put((event, args)))
+        await self.event_queue.put((event, args))
         self.logging(logging.DEBUG, f'putted {event} on bus')
 
     def subscribe(self, event: str, callback, *dataargs):
@@ -223,7 +226,8 @@ class MessageBus:
         # args = deepcopy(args)
 
         # mainloop.call_soon_threadsafe(self._push_queue_event, event, args)
-        self._push_queue_event(event, args)
+        # self._push_queue_event(event, args)
+        loop_thread.ensure_coroutine(self._push_queue_event(event, args))
 
         space, event = self.split_channel(event)
         if not space or space not in self.routers:
@@ -256,7 +260,7 @@ class MessageBus:
             if event == '':
                 # Send event to queues of subscribers
                 for subscriber in self.subscribers:
-                    subscriber.enqueue(args)
+                    await subscriber.enqueue(args)
 
             # logging.info(f'')
             # if event == '':
@@ -287,6 +291,13 @@ class MessageBus:
 mainbus = MessageBus()
 
 
+def reinit():
+    global loop_thread, mainloop, mainbus
+    loop_thread = AsyncThread('message_bus_thread')
+    mainloop = loop_thread.loop  # when stopping, call loop_thread.stop()
+    mainbus = MessageBus()
+
+
 def publish_event(event, *args):
     # mainbus.publish(event, args)
     mainloop.call_soon_threadsafe(mainbus.publish, event, *args)
@@ -305,20 +316,20 @@ def get_bus(name):
 
 
 async def shutdown():
-    global loop_thread, mainbus
+    global loop_thread, mainbus, mainloop
     if not loop_thread:
         logging.info('loop already stopped')
         return
     logging.info('shutting down xmessagebus module')
     assert isinstance(mainbus, MessageBus)
     await mainbus.stop()
-    mainbus = None
+    # mainbus = None
     await loop_thread.stop()
-    loop_thread = None
+    # loop_thread = None
+    # mainloop = None
     # pass
     # mainloop.stop()
     # mainloop
-
 
 # def main():
 #     # global mainloop
@@ -335,20 +346,3 @@ async def shutdown():
 # def stop():
 #     logging.info('stopping message_bus')
 #     mainloop.call_soon_threadsafe(shutdown)
-
-def cleanup():
-    # Do cleanup actions here
-    # if sys.stderr != logging.get_absl_handler().python_handler.stream:
-    #     print(sys.stderr)
-    #     print(logging.get_absl_handler().python_handler.stream)
-    #     logging.get_absl_handler().python_handler.stream = sys.stderr
-    if not sys.stderr.closed:
-        logging.info("Module cleanup")
-    # await shutdown()
-    t = xasyncio.AsyncedThread('main', threading.current_thread())
-    t.run_coroutine(shutdown())
-    # loop_thread.stop()
-
-
-# logging.info("register cleanup")
-# atexit.register(cleanup)

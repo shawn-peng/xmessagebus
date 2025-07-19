@@ -42,22 +42,23 @@ class MyTestCase(unittest.IsolatedAsyncioTestCase):
         logging.set_verbosity(logging.DEBUG)
         logging.get_absl_handler().activate_python_handler()
         logging.get_absl_handler().python_handler.stream = sys.stderr
+        if xmessagebus.loop_thread.stopped:
+            xmessagebus.reinit()
         logging.info(f'loop_thread: {xmessagebus.loop_thread}')
-        # if not xmessagebus.loop_thread:
-        #     xmessagebus.init()
 
     async def asyncTearDown(self) -> None:
-        logging.info('shutting down')
+        pass
+        # logging.info('shutting down')
         await xmessagebus.shutdown()
 
-    @catch_exceptions
+    # @catch_exceptions
     async def test_send_msg_mainbus(self):
         _ = self
         xmessagebus.mainbus.publish('Testing', 'Test message')
         print('msg sent')
         await asyncio.sleep(1)
 
-    @catch_exceptions
+    # @catch_exceptions
     async def test_direct_bus(self):
         seq = []
         # event = threading.Event()
