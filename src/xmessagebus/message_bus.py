@@ -1,9 +1,9 @@
 import asyncio
 import threading
+from dataclasses import field
 
 from typing import *
 
-import xasyncio
 from absl import logging
 from absl import app
 from enum import Enum
@@ -13,6 +13,7 @@ from threading import RLock
 from copy import deepcopy
 import dataclasses
 
+import xasyncio
 from xasyncio import *
 import atexit
 import sys
@@ -25,10 +26,16 @@ import sys
 # mainloop = asyncio.new_event_loop()
 # mainloop.set_debug(True)
 loop_thread = xasyncio.AsyncThread('message_bus_thread')
-mainloop = loop_thread.loop
+
+loop = asyncio.get_event_loop()
+loop.run_until_complete(loop_thread.__aenter__())
+# mainloop = loop_thread.loop
 
 sources = {}
 
+
+def current_loop():
+    return hex(id(asyncio.get_event_loop()))
 
 # def register_event(name):
 #     if name in sources:
@@ -47,9 +54,13 @@ class Subscriber:
     callback: Callable
     dataargs: Tuple
     owner_async_thread: xasyncio.AsyncThread | xasyncio.AsyncedThread
-    queue: asyncio.Queue = asyncio.Queue()
+    # queue: asyncio.Queue = asyncio.Queue()
+    queue: AsyncQueue = field(default_factory=AsyncQueue)
 
     def __post_init__(self):
+        self.owner_loop = self.owner_async_thread.loop
+        if self.queue.loop is not self.owner_loop:
+            raise RuntimeError('initialized in wrong loop')
         self.listen()
 
     async def enqueue(self, args):
@@ -57,12 +68,19 @@ class Subscriber:
 
         # assert threading.current_thread() == self.owner_async_thread
         async def _enqueue():
+            if asyncio.get_event_loop() is not self.owner_loop:
+                raise RuntimeError('called in wrong loop')
             await self.queue.put(args)
-            logging.debug(f'put on subscriber({self.owner_async_thread}) queue, {args}')
+            logging.debug(f'put on subscriber({hex(id(self.queue.loop))}) '
+                          f'queue, {args}')
 
-        logging.debug(f'enqueue in thread {self.owner_async_thread}')
+        logging.debug(f'current thread is {threading.current_thread()}')
+        logging.debug(f'will enqueue in thread {self.owner_async_thread}')
+        logging.debug(f'async_thread loop is '
+                      f'{hex(id(self.owner_async_thread.loop))}')
         # self.owner_async_thread.call_sync(_enqueue)
         # self.owner_async_thread.await_coroutine(_enqueue())
+        # await self.owner_async_thread.run_coroutine(_enqueue())
         await self.owner_async_thread.run_coroutine(_enqueue())
 
     def listen(self):
@@ -87,10 +105,17 @@ class Subscriber:
         logging.debug('subscriber start listening')
         while True:
             # Listening to self queue
+            logging.debug(f'waiting queue in thread {threading.current_thread()}')
+            logging.debug(f'in loop {hex(id(asyncio.get_event_loop()))}')
+            if asyncio.get_event_loop() is not self.owner_loop:
+                raise RuntimeError('called in wrong loop')
             event = await self.queue.get()
             if event is None:
                 break
-            self.callback(*event, *self.dataargs)
+            if asyncio.iscoroutinefunction(self.callback):
+                await self.callback(*event, *self.dataargs)
+            else:
+                self.callback(*event, *self.dataargs)
 
 
 @dataclasses.dataclass
@@ -149,7 +174,8 @@ class MessageBus:
         self.lock = threading.RLock()
         # self.dispatcher = Dispatcher()
         # self.monitor = Monitor()
-        self.event_queue = asyncio.Queue()
+        # self.event_queue = asyncio.Queue()
+        self.event_queue: AsyncQueue | None = None
         # self.dispatchers = []
         self.subscribers = []
         self.monitors = []
@@ -159,6 +185,9 @@ class MessageBus:
         self.task = None
         logging.info(f'MessageBus({self.name}) created')
         self.start()
+
+    def in_thread_init(self):
+        self.event_queue = AsyncQueue()
 
     def get_bus(self, name):
         space, name = self.split_channel(name)
@@ -203,9 +232,10 @@ class MessageBus:
                 # The subscriber belong to the subscriber thread and shouldn't be modified in bus thread
                 thread = threading.current_thread()
                 if not isinstance(thread, AsyncThread):
-                    thread = xasyncio.AsyncedThread(f'wrapped_for_{self.name}', thread)
+                    thread = xasyncio.AsyncedThread(f'wrapped_for_{self.name}',
+                                                    thread)
                 self.subscribers.append(Subscriber(callback, dataargs, thread))
-                return
+                return None
 
             space, event = self.split_channel(event)
             # space, event = event.split(self.dilim, 1)
@@ -250,6 +280,8 @@ class MessageBus:
         return self.routers[space].monitor(path, callback, dataargs)
 
     async def run(self):
+        self.in_thread_init()
+
         self.running = True
         logging.info(f'MessageBus({self}) running...')
         while self.running:
@@ -270,17 +302,21 @@ class MessageBus:
 
     def start(self):
         def _start():
-            self.task = mainloop.create_task(self.run())
-            self.logging(logging.DEBUG, f'{self} start running, task: {self.task}')
+            # self.task = mainloop.create_task(self.run())
+            self.task = loop_thread.ensure_coroutine(self.run())
+            self.logging(logging.DEBUG,
+                         f'{self} start running, task: {self.task}')
 
-        mainloop.call_soon_threadsafe(_start)
+        # mainloop.call_soon_threadsafe(_start)
+        loop_thread.async_call(_start)
         # loop_thread.call_async(self.run)
 
     async def stop(self):
         logging.info(f'stopping bus ({self.name})')
         for bus in self.routers.values():
             await bus.stop()
-        await loop_thread.call_sync(self.task.cancel)
+        if self.task:
+            await loop_thread.sync_call(self.task.cancel)
         logging.info(f'bus ({self.name}) stopped')
 
     def __repr__(self):
@@ -292,15 +328,18 @@ mainbus = MessageBus()
 
 
 def reinit():
-    global loop_thread, mainloop, mainbus
+    global loop_thread, mainbus
     loop_thread = AsyncThread('message_bus_thread')
-    mainloop = loop_thread.loop  # when stopping, call loop_thread.stop()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(loop_thread.__aenter__())
+    # mainloop = loop_thread.loop  # when stopping, call loop_thread.stop()
     mainbus = MessageBus()
 
 
 def publish_event(event, *args):
     # mainbus.publish(event, args)
-    mainloop.call_soon_threadsafe(mainbus.publish, event, *args)
+    # mainloop.call_soon_threadsafe(mainbus.publish, event, *args)
+    loop_thread.async_call(mainbus.publish, event, *args)
 
 
 def subscribe_event(event, callback, *dataargs):
@@ -316,7 +355,7 @@ def get_bus(name):
 
 
 async def shutdown():
-    global loop_thread, mainbus, mainloop
+    global loop_thread, mainbus
     if not loop_thread:
         logging.info('loop already stopped')
         return
@@ -324,12 +363,19 @@ async def shutdown():
     assert isinstance(mainbus, MessageBus)
     await mainbus.stop()
     # mainbus = None
-    await loop_thread.stop()
+    await loop_thread.__aexit__(*sys.exc_info())
     # loop_thread = None
     # mainloop = None
     # pass
     # mainloop.stop()
-    # mainloop
+
+
+def _shutdown():
+    print('_shutdown called')
+    loop.run_until_complete(shutdown())
+
+
+atexit.register(_shutdown)
 
 # def main():
 #     # global mainloop

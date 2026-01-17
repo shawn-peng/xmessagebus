@@ -84,6 +84,34 @@ class MyTestCase(unittest.IsolatedAsyncioTestCase):
         # ret = timer.join()
         self.assertEqual([1, 'test msg'], seq)
 
+    # @catch_exceptions
+    async def test_subscribe_w_async_func(self):
+        seq = []
+        # event = threading.Event()
+        event = asyncio.Event()
+        main_thread = threading.current_thread()
+
+        # timer = threading.Thread(target=timeout)
+        # timer.start()
+        async def _callback(msg):
+            # self.assertEqual(main_thread, threading.current_thread())
+            print('main_thread', main_thread)
+            print('current_thread', threading.current_thread())
+            # self.assertEqual('test msg', msg)
+            seq.append(1)
+            seq.append(msg)
+            event.set()
+
+        xmessagebus.subscribe_event('testing|bus_1|event_1', _callback)
+        bus = xmessagebus.get_bus('testing|bus_1')
+
+        bus.publish('event_1', 'test msg')
+        # event.wait()
+        logging.info('Waiting event...')
+        await event.wait()
+        # ret = timer.join()
+        self.assertEqual([1, 'test msg'], seq)
+
 
 if __name__ == '__main__':
     unittest.main()
