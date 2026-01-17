@@ -320,11 +320,16 @@ class MessageBus:
 
     async def stop(self):
         logging.info(f'stopping bus ({self.name})')
+        print('made to this far 1')
         for bus in self.routers.values():
             await bus.stop()
+        print('made to this far 2')
         if self.task:
             await loop_thread.sync_call(self.task.cancel)
+            self.task = None
+        print('made to this far 3')
         logging.info(f'bus ({self.name}) stopped')
+        print('made to this far 4')
 
     def __repr__(self):
         # return f'<MessageBus: {self.name}> (Subscribed: {len(self.dispatcher)}, Observing: {len(self.monitor)})'
