@@ -27,7 +27,14 @@ import sys
 # mainloop.set_debug(True)
 loop_thread = xasyncio.AsyncThread('message_bus_thread')
 
-loop = asyncio.get_event_loop()
+logging.info(sys.version)
+logging.info(sys.version_info)
+
+try:
+    loop = asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 loop.run_until_complete(loop_thread.__aenter__())
 # mainloop = loop_thread.loop
 
