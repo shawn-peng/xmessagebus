@@ -24,7 +24,7 @@ jobs:
       - name: Install a dev package
         run: pip install -e .
       - name: Run tests
-        run: pytest
+        run: pytest > output.log 2>&1
   build:
     name: Build distribution 📦
     runs-on: ubuntu-latest

@@ -376,6 +376,7 @@ async def shutdown():
     await mainbus.stop()
     # mainbus = None
     await loop_thread.__aexit__(*sys.exc_info())
+    logging.info(f'loop_thread {loop_thread} stopped')
     # loop_thread = None
     # mainloop = None
     # pass
