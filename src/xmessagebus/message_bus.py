@@ -44,6 +44,7 @@ sources = {}
 def current_loop():
     return hex(id(asyncio.get_event_loop()))
 
+
 # def register_event(name):
 #     if name in sources:
 #         raise KeyError('Duplicated event %s' % name)
@@ -93,7 +94,9 @@ class Subscriber:
     def listen(self):
         """Non-blocking"""
         self._assert_thread()
-        asyncio.ensure_future(self._watch_queue())
+        # asyncio.ensure_future(self._watch_queue())
+        asyncio.ensure_future(
+            self.owner_async_thread.run_coroutine(self._watch_queue()))
         # self.owner_async_thread.call_async(self._watch_queue)
 
     def _assert_thread(self):
@@ -112,7 +115,8 @@ class Subscriber:
         logging.debug('subscriber start listening')
         while True:
             # Listening to self queue
-            logging.debug(f'waiting queue in thread {threading.current_thread()}')
+            logging.debug(
+                f'waiting queue in thread {threading.current_thread()}')
             logging.debug(f'in loop {hex(id(asyncio.get_event_loop()))}')
             if asyncio.get_event_loop() is not self.owner_loop:
                 raise RuntimeError('called in wrong loop')
@@ -237,10 +241,7 @@ class MessageBus:
                 # self.dispatchers.append(Dispatcher(callback, dataargs))
                 # return self.dispatcher.register(callback, dataargs)
                 # The subscriber belong to the subscriber thread and shouldn't be modified in bus thread
-                thread = threading.current_thread()
-                if not isinstance(thread, AsyncThread):
-                    thread = xasyncio.AsyncedThread(f'wrapped_for_{self.name}',
-                                                    thread)
+                thread = xasyncio.current_async_thread()
                 self.subscribers.append(Subscriber(callback, dataargs, thread))
                 return None
 
