@@ -79,13 +79,16 @@ class Subscriber:
             if asyncio.get_event_loop() is not self.owner_loop:
                 raise RuntimeError('called in wrong loop')
             await self.queue.put(args)
-            logging.debug(f'put on subscriber({hex(id(self.queue.loop))}) '
-                          f'queue, {args}')
+            MessageBus.logging(logging.DEBUG,
+                               f'put on subscriber({hex(id(self.queue.loop))}) '
+                               f'queue, {args}')
 
-        logging.debug(f'current thread is {threading.current_thread()}')
-        logging.debug(f'will enqueue in thread {self.owner_async_thread}')
-        logging.debug(f'async_thread loop is '
-                      f'{hex(id(self.owner_async_thread.loop))}')
+        MessageBus.logging(logging.DEBUG,
+                           f'current thread is {threading.current_thread()}')
+        MessageBus.logging(logging.DEBUG,
+                           f'will enqueue in thread {self.owner_async_thread}')
+        MessageBus.logging(logging.DEBUG, f'async_thread loop is '
+                                          f'{hex(id(self.owner_async_thread.loop))}')
         # self.owner_async_thread.call_sync(_enqueue)
         # self.owner_async_thread.await_coroutine(_enqueue())
         # await self.owner_async_thread.run_coroutine(_enqueue())
@@ -101,10 +104,10 @@ class Subscriber:
 
     def _assert_thread(self):
         if isinstance(self.owner_async_thread, xasyncio.AsyncThread):
-            logging.debug('listening in AsyncThread')
+            MessageBus.logging(logging.DEBUG, 'listening in AsyncThread')
             assert threading.current_thread() == self.owner_async_thread
         elif isinstance(self.owner_async_thread, xasyncio.AsyncedThread):
-            logging.debug('listening in AsyncedThread')
+            MessageBus.logging(logging.DEBUG, 'listening in AsyncedThread')
             assert threading.current_thread() == self.owner_async_thread.thread
         else:
             raise TypeError('Unsupported type', type(self.owner_async_thread))
@@ -112,12 +115,13 @@ class Subscriber:
     async def _watch_queue(self):
         """Blocking watch"""
         self._assert_thread()
-        logging.debug('subscriber start listening')
+        MessageBus.logging(logging.DEBUG, 'subscriber start listening')
         while True:
             # Listening to self queue
-            logging.debug(
-                f'waiting queue in thread {threading.current_thread()}')
-            logging.debug(f'in loop {hex(id(asyncio.get_event_loop()))}')
+            MessageBus.logging(logging.DEBUG,
+                               f'waiting queue in thread {threading.current_thread()}')
+            MessageBus.logging(logging.DEBUG,
+                               f'in loop {hex(id(asyncio.get_event_loop()))}')
             if asyncio.get_event_loop() is not self.owner_loop:
                 raise RuntimeError('called in wrong loop')
             event = await self.queue.get()
@@ -253,6 +257,23 @@ class MessageBus:
             ret = self.routers[space].subscribe(event, callback, *dataargs)
         return ret
 
+    def unsubscribe(self, event: str, callback):
+        with self.lock:
+            if event == '':
+                for i in range(len(self.subscribers)):
+                    if callback == self.subscribers[i].callback:
+                        dataargs = self.subscribers[i].dataargs
+                        del self.subscribers[i]
+                        self.logging(logging.DEBUG, "Event unsubscribed")
+                        return dataargs
+                raise ValueError(f'callback {callback} not found on the bus')
+
+            space, event = self.split_channel(event)
+            if space not in self.routers:
+                raise KeyError(f'{space} not in routers')
+
+            return self.routers[space].unsubscribe(event, callback)
+
     def publish(self, event: str, *args):
         """
         publish an event with arguments to the event queue, this is thread safe
@@ -357,6 +378,10 @@ def publish_event(event, *args):
 
 def subscribe_event(event, callback, *dataargs):
     return mainbus.subscribe(event, callback, *dataargs)
+
+
+def unsubscribe_event(event, callback):
+    return mainbus.unsubscribe(event, callback)
 
 
 def observe_bus(category, callback, *dataargs):

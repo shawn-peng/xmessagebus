@@ -112,6 +112,17 @@ class MyTestCase(unittest.IsolatedAsyncioTestCase):
         # ret = timer.join()
         self.assertEqual([1, 'test msg'], seq)
 
+    async def test_unsubscribe(self):
+        bus = xmessagebus.get_bus('testing|bus_1|event_1')
+        def _dummy_callback(msg):
+            print('dummy_callback', msg)
+        xmessagebus.subscribe_event(
+            'testing|bus_1|event_1', _dummy_callback)
+        self.assertEqual(1, len(bus.subscribers))
+        xmessagebus.unsubscribe_event(
+            'testing|bus_1|event_1', _dummy_callback)
+        self.assertEqual(0, len(bus.subscribers))
+
 
 if __name__ == '__main__':
     unittest.main()
