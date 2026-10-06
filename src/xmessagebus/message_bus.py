@@ -67,8 +67,11 @@ class Subscriber:
 
     def __post_init__(self):
         self.owner_loop = self.owner_async_thread.loop
-        if self.queue.loop is not self.owner_loop:
+        # if self.queue.loop is not self.owner_loop:
+        if self.owner_loop is not xasyncio.current_async_thread().loop:
             raise RuntimeError('initialized in wrong loop')
+        if self.queue.async_thread.loop is not self.owner_loop:
+            raise RuntimeError('queue initialized in wrong loop')
         self.listen()
 
     async def enqueue(self, args):
@@ -122,7 +125,7 @@ class Subscriber:
                                f'waiting queue in thread {threading.current_thread()}')
             MessageBus.logging(logging.DEBUG,
                                f'in loop {hex(id(asyncio.get_event_loop()))}')
-            if asyncio.get_event_loop() is not self.owner_loop:
+            if asyncio.get_event_loop() is not self.owner_async_thread.loop:
                 raise RuntimeError('called in wrong loop')
             event = await self.queue.get()
             if event is None:
