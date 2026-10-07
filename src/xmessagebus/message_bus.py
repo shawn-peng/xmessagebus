@@ -1,6 +1,7 @@
 import asyncio
 import threading
 from dataclasses import field
+from functools import wraps
 
 from typing import *
 
@@ -39,6 +40,16 @@ loop.run_until_complete(loop_thread.__aenter__())
 # mainloop = loop_thread.loop
 
 sources = {}
+
+
+def ensure_running(method):
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        if not self.running:
+            raise RuntimeError(f'MessageBus({self.name}) is not running')
+        return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 def current_loop():
@@ -207,6 +218,7 @@ class MessageBus:
     def in_thread_init(self):
         self.event_queue = AsyncQueue()
 
+    @ensure_running
     def get_bus(self, name):
         space, name = self.split_channel(name)
         if space not in self.routers:
@@ -234,6 +246,7 @@ class MessageBus:
         await self.event_queue.put((event, args))
         self.logging(logging.DEBUG, f'putted {event} on bus')
 
+    @ensure_running
     def subscribe(self, event: str, callback, *dataargs):
         """
         if event == '', will subscribe to all event on this bus
@@ -260,6 +273,7 @@ class MessageBus:
             ret = self.routers[space].subscribe(event, callback, *dataargs)
         return ret
 
+    @ensure_running
     def unsubscribe(self, event: str, callback):
         with self.lock:
             if event == '':
@@ -277,6 +291,7 @@ class MessageBus:
 
             return self.routers[space].unsubscribe(event, callback)
 
+    @ensure_running
     def publish(self, event: str, *args):
         """
         publish an event with arguments to the event queue, this is thread safe
@@ -298,6 +313,7 @@ class MessageBus:
 
         self.routers[space].publish(event, *args)
 
+    @ensure_running
     def monitor(self, path, callback, dataargs):
         if path == '':
             thread = threading.current_thread()
@@ -316,24 +332,25 @@ class MessageBus:
 
         self.running = True
         logging.info(f'MessageBus({self}) running...')
-        while self.running:
-            # events = []
-            # while not self.event_queue.empty():
-            #     self.event_queue.get_nowait()
-            event, args = await self.event_queue.get()
-            if event == '':
-                # Send event to queues of subscribers
-                for subscriber in self.subscribers:
-                    await subscriber.enqueue(args)
-
-            # logging.info(f'')
-            # if event == '':
-            #     self.dispatcher.dispatch(*args)
-            # # self.monitor.notify('|'.join((self.name, event)), args)
-            # self.monitor.notify(event, *args)
+        try:
+            while self.running:
+                # events = []
+                # while not self.event_queue.empty():
+                #     self.event_queue.get_nowait()
+                event, args = await self.event_queue.get()
+                if event == '':
+                    # Send event to queues of subscribers
+                    for subscriber in self.subscribers:
+                        await subscriber.enqueue(args)
+        finally:
+            self.running = False
 
     def start(self):
+        self.running = True
+
         def _start():
+            if not self.running:
+                return
             # self.task = mainloop.create_task(self.run())
             self.task = loop_thread.ensure_coroutine(self.run())
             self.logging(logging.DEBUG,
@@ -345,6 +362,7 @@ class MessageBus:
 
     async def stop(self):
         logging.info(f'stopping bus ({self.name})')
+        self.running = False
         print('made to this far 1')
         for bus in self.routers.values():
             await bus.stop()

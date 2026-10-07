@@ -123,6 +123,21 @@ class MyTestCase(unittest.IsolatedAsyncioTestCase):
             'testing|bus_1|event_1', _dummy_callback)
         self.assertEqual(0, len(bus.subscribers))
 
+    async def test_bus_methods_require_running_bus(self):
+        bus = xmessagebus.MessageBus('stopped_test')
+        await bus.stop()
+
+        operations = [
+            lambda: bus.get_bus('child'),
+            lambda: bus.subscribe('', lambda: None),
+            lambda: bus.unsubscribe('', lambda: None),
+            lambda: bus.publish('event'),
+            lambda: bus.monitor('', lambda: None, ()),
+        ]
+        for operation in operations:
+            with self.assertRaisesRegex(RuntimeError, 'is not running'):
+                operation()
+
 
 if __name__ == '__main__':
     unittest.main()
