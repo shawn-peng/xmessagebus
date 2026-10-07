@@ -213,6 +213,7 @@ class MessageBus:
         self.running = False
         self.dilim = '|'
         self.task = None
+        self._event_started = asyncio.Event()
         logging.info(f'MessageBus({self.name}) created')
         self.start()
 
@@ -305,6 +306,7 @@ class MessageBus:
 
         # mainloop.call_soon_threadsafe(self._push_queue_event, event, args)
         # self._push_queue_event(event, args)
+        assert self.event_queue
         loop_thread.ensure_coroutine(self._push_queue_event(event, args))
 
         space, event = self.split_channel(event)
@@ -333,6 +335,7 @@ class MessageBus:
 
         self.running = True
         logging.info(f'MessageBus({self}) running...')
+        self._event_started.set()
         try:
             while self.running:
                 # events = []
@@ -347,19 +350,17 @@ class MessageBus:
             self.running = False
 
     def start(self):
-        self.running = True
-
-        def _start():
-            if not self.running:
-                return
-            # self.task = mainloop.create_task(self.run())
+        async def _start():
+            # self.logging(logging.DEBUG, f'{self} start running')
             self.task = loop_thread.ensure_coroutine(self.run())
             self.logging(logging.DEBUG,
                          f'{self} start running, task: {self.task}')
+            await self._event_started.wait()
 
         # mainloop.call_soon_threadsafe(_start)
-        loop_thread.async_call(_start)
+        # loop_thread.async_call(_start)
         # loop_thread.call_async(self.run)
+        loop_thread.run_coroutine_sync(_start())
 
     async def stop(self):
         logging.info(f'stopping bus ({self.name})')
