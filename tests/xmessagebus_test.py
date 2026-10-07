@@ -18,6 +18,7 @@ logging.get_absl_handler().activate_python_handler()
 logging.get_absl_handler().python_handler.stream = sys.stderr
 
 import xmessagebus
+from xmessagebus import message_bus
 
 
 class TimeoutError(Exception):
@@ -42,9 +43,10 @@ class MyTestCase(unittest.IsolatedAsyncioTestCase):
         logging.set_verbosity(logging.DEBUG)
         logging.get_absl_handler().activate_python_handler()
         logging.get_absl_handler().python_handler.stream = sys.stderr
-        if xmessagebus.loop_thread.stopped:
+        if message_bus.loop_thread.stopped or not message_bus.mainbus.running:
             xmessagebus.reinit()
-        logging.info(f'loop_thread: {xmessagebus.loop_thread}')
+        assert message_bus.mainbus.running
+        logging.info(f'loop_thread: {message_bus.loop_thread}')
 
     async def asyncTearDown(self) -> None:
         pass
@@ -54,7 +56,8 @@ class MyTestCase(unittest.IsolatedAsyncioTestCase):
     # @catch_exceptions
     async def test_send_msg_mainbus(self):
         _ = self
-        xmessagebus.mainbus.publish('Testing', 'Test message')
+        assert message_bus.mainbus.running
+        message_bus.mainbus.publish('Testing', 'Test message')
         print('msg sent')
         await asyncio.sleep(1)
 

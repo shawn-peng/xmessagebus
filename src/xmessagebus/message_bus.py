@@ -37,6 +37,7 @@ except RuntimeError:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 loop.run_until_complete(loop_thread.__aenter__())
+loop_thread.loop.call_soon_threadsafe(loop_thread.loop.set_debug, True)
 # mainloop = loop_thread.loop
 
 sources = {}
@@ -384,11 +385,14 @@ mainbus = MessageBus()
 
 def reinit():
     global loop_thread, mainbus
+    # nonlocal loop_thread, mainbus
     loop_thread = AsyncThread('message_bus_thread')
     loop = asyncio.get_event_loop()
     loop.run_until_complete(loop_thread.__aenter__())
+    loop_thread.loop.call_soon_threadsafe(loop_thread.loop.set_debug, True)
     # mainloop = loop_thread.loop  # when stopping, call loop_thread.stop()
     mainbus = MessageBus()
+    assert mainbus.running
 
 
 def publish_event(event, *args):
