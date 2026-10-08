@@ -95,7 +95,8 @@ class Subscriber:
                 raise RuntimeError('called in wrong loop')
             await self.queue.put(args)
             MessageBus.logging(logging.DEBUG,
-                               f'put on subscriber({hex(id(self.queue.loop))}) '
+                               f'put on subscriber('
+                               f'{hex(id(self.queue.async_thread.loop))}) '
                                f'queue, {args}')
 
         MessageBus.logging(logging.DEBUG,
